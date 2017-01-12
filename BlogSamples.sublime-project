@@ -2,7 +2,20 @@
 	"folders":
 	[
 		{
-			"path": "."
+			"path": ".",
+			"folder_exclude_patterns":
+				[
+					"BlogSamples_UnityProj/Library",
+					"BlogSamples_UnityProj/Obj",
+					"BlogSamples_UnityProj/Temp"
+				],
+			"file_exclude_patterns":
+				[
+					"BlogSamples_UnityProj/*.meta",
+					"BlogSamples_UnityProj/*.sln",
+					"BlogSamples_UnityProj/*.csproj"
+
+				]
 		}
 	]
 }
