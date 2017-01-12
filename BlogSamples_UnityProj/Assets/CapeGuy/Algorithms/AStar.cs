@@ -6,6 +6,8 @@
 //
 // For more information see https://capeguy.co.uk/2016/01/a-for-all/.
 
+//#define REQUIRE_STRUCT // If you undefine this, you must also undefine ASTAR_REQUIRES_STRUCT_ELEMENT in AStar_Tests.cs
+
 using System;
 using System.Linq;
 using System.Collections.Generic;
@@ -14,10 +16,16 @@ using UnityEngine.Assertions;
 namespace CapeGuy.Algorithms {
 
 	public class AStar<GraphElement>
+	#if REQUIRE_STRUCT
+		where GraphElement : struct
+	#endif
 	{
+
+		/// <summary>
 		/// Data which defines a single search space in which we can perform AStar searches (defines the actual graph programatically).
 		/// Rather than giving all the data up front, we use callback methods to enquire about the graph as we need. That allows for
 		/// lazy evaluation of the graph space by the user/algorithm.
+		/// </summary>
 		public struct LazyGraph
 		{
 			public bool GetIsValid ()
@@ -34,7 +42,7 @@ namespace CapeGuy.Algorithms {
 
 			// Called repeatedly during AStar calculation to get the elements which are connected to the given elements.
 			// Note: IList must not be modified after it is given to the algorithm.
-			public Func<GraphElement, IList<GraphElement>> getElementsConnectedToElementFunc;
+			public Func<GraphElement, IEnumerable<GraphElement>> getElementsConnectedToElementFunc;
 
 			// Gets the actual cost of moving from the first element to the second element. This will only be called for pairs of
 			// elements returned by getElementsConnectedToElementFunc.
@@ -53,40 +61,72 @@ namespace CapeGuy.Algorithms {
 			_graph = graph;
 		}
 
+		public void ClearCache(bool releaseMemory = false) {
+			_sortedCandidateGraphEntries.Clear();
+			if (!releaseMemory) {
+				foreach (var graphEntry in _graphEntries.Values) {
+					graphEntry.Clear();
+					_graphEntryCache.Add(graphEntry);
+				}
+			}
+			_graphEntries.Clear();
+			_targetEntry = null;
+			_startEntry = null;
+		}
+
 		/// <summary>
 		/// Calculates the shortest route through the graph to the target using the given LazyGraph callbacks.
 		/// </summary>
 		/// <param name="startingElement">Starting element.</param>
 		/// <param name="allowPartialSolution">If true, then the closest to complete solution will be used, even if the solution
 		/// doesn't actually reacth the target position.</param>
-		public IList<GraphElement> Calculate (GraphElement startingElement, GraphElement targetElement, bool allowPartialSolution = false, float maxAcceptableRouteLength = float.MaxValue)
+		public IList<GraphElement> Calculate (GraphElement startElement, GraphElement targetElement, bool allowPartialSolution = false, float maxAcceptableRouteLength = float.MaxValue)
 		{
-			Assert.IsTrue (startingElement != null);
+			#if !REQUIRE_STRUCT
+			Assert.IsTrue (startElement != null);
 			Assert.IsTrue (targetElement != null);
+			#endif
 			Assert.IsTrue (0.0f < maxAcceptableRouteLength);
 
 			// Special case for if we are starting our search at the target element.
-			if (startingElement.Equals (targetElement)) {
+			if (startElement.Equals (targetElement)) {
 				return new List<GraphElement> { targetElement };
 			}
 
-			Assert.IsTrue (_sortedCandidateGraphEntries != null);
-			_sortedCandidateGraphEntries.Clear ();
+			Assert.IsTrue (_sortedCandidateGraphEntries != null && _sortedCandidateGraphEntries.Count == 0);
 
-			// If we have a new target entry then we need to clear all our cached data. Otherwise we can reuse it.
-			Assert.IsTrue (_graphEntries != null);
-			if (_targetEntry == null || !targetElement.Equals(_targetEntry.graphElement) || _maxAcceptableRouteLength != maxAcceptableRouteLength) {
-				_targetEntry = null;
-				_graphEntries.Clear ();
-				_maxAcceptableRouteLength = maxAcceptableRouteLength;
+			// Clear all the cached data if the search has changed...
+			{
+				Assert.IsTrue (_graphEntries != null);
+				bool hasSearchChanged = false;
+				if (_maxAcceptableRouteLength != maxAcceptableRouteLength) {
+					_maxAcceptableRouteLength = maxAcceptableRouteLength;
+					hasSearchChanged = true;
+				}
+
+				if (_startEntry != null && !startElement.Equals(_startEntry.graphElement)) {
+					hasSearchChanged = true;
+				}
+
+				// Set the target entry...
+				if (_targetEntry != null && !targetElement.Equals(_targetEntry.graphElement)) {
+					hasSearchChanged = true;
+				}
+
+				if (hasSearchChanged) {
+					_startEntry = null;
+					_targetEntry = null;
+					_graphEntries.Clear();
+				}
 			}
 
 			if (_targetEntry == null) {
 				_targetEntry = CreateGraphEntryFor (targetElement);
 			}
 			Assert.IsTrue (_targetEntry.graphElement.Equals(targetElement));
-			AddStartGraphEntry (startingElement);
 
+			// Initialise the search graph with the starting element...
+			AddStartGraphEntry (startElement);
 			while (true)
 			{
 				if (_sortedCandidateGraphEntries.Count == 0)
@@ -112,11 +152,10 @@ namespace CapeGuy.Algorithms {
 			}
 
 			List<GraphElement> solutionList = ExtractSolution(targetElement, allowPartialSolution);
-			Assert.IsTrue (solutionList == null || startingElement.Equals (solutionList[0]));
+			Assert.IsTrue (solutionList == null || startElement.Equals (solutionList[0]));
 
 			// Reset the working data.
-			_sortedCandidateGraphEntries = new List<GraphEntry>();
-			_graphEntries = new Dictionary<GraphElement, GraphEntry>();
+			_sortedCandidateGraphEntries.Clear();
 
 			return solutionList;
 		}
@@ -141,7 +180,9 @@ namespace CapeGuy.Algorithms {
 			Assert.IsTrue (_sortedCandidateGraphEntries [0] == bestEntry);
 			_sortedCandidateGraphEntries.RemoveAt (0);
 			GraphElement bestElement = bestEntry.graphElement;
+			#if !REQUIRE_STRUCT
 			Assert.IsTrue (bestElement != null);
+			#endif
 
 			// Now we should add/update all the connected entries.
 			if (bestEntry.connectedElements != null) {
@@ -190,7 +231,14 @@ namespace CapeGuy.Algorithms {
 		{
 			Assert.IsTrue (!_graphEntries.ContainsKey(graphElement)); // We should only be creating a new element if there isn't one already.
 			// If the _targetEntry hasn't been setup yet then we must be building it now. Pass null (which evaluates to zero estimated cost as we ARE the target).
-			GraphEntry newEntry = new GraphEntry (graphElement, _targetEntry != null ? _targetEntry.graphElement : graphElement, _graph);
+			GraphEntry newEntry;
+			if (_graphEntryCache.Count == 0) {
+				newEntry = new GraphEntry (this);
+			} else {
+				newEntry = _graphEntryCache.Last();
+				_graphEntryCache.RemoveAt(_graphEntryCache.Count - 1);
+			}
+			newEntry.Setup(graphElement);
 			_graphEntries [graphElement] = newEntry;
 			return newEntry;
 		}
@@ -289,13 +337,11 @@ namespace CapeGuy.Algorithms {
 
 		private void AddSortedCandidate (GraphEntry newCandidateEntry)
 		{
-			Assert.IsTrue (!_sortedCandidateGraphEntries.Contains (newCandidateEntry));
-
 			// Only actually add if if it is possible that it will produce a better solution than our existing best solution, and that it's better than the worst cost we're interested in.
 			float currBestSolutionCost = _targetEntry.currentBestPossibleTotalCost;
 			if (newCandidateEntry.currentBestPossibleTotalCost <= _maxAcceptableRouteLength && (_targetEntry.bestCostVia == null || newCandidateEntry.currentBestPossibleTotalCost < currBestSolutionCost))
 			{
-				int findIndex = _sortedCandidateGraphEntries.BinarySearch (newCandidateEntry, new CandidateComparer ());
+				int findIndex = _sortedCandidateGraphEntries.BinarySearch (newCandidateEntry, _candidateComparer);
 				if (findIndex < 0) {
 					// We didn't find it so insert it at the bitwise compliment of findIndex (see https://msdn.microsoft.com/en-us/library/w4e7fxsh(v=vs.110).aspx)
 					_sortedCandidateGraphEntries.Insert (~findIndex, newCandidateEntry);
@@ -304,6 +350,7 @@ namespace CapeGuy.Algorithms {
 				}
 			}
 		}
+		static readonly CandidateComparer _candidateComparer = new CandidateComparer();
 
 		private void RemoveSortedCandidate (GraphEntry candidateEntry)
 		{
@@ -345,12 +392,29 @@ namespace CapeGuy.Algorithms {
 
 		private class GraphEntry
 		{
-			public GraphEntry (GraphElement graphElement, GraphElement targetElement, LazyGraph graph)
+			public GraphEntry (AStar<GraphElement> aStar)
 			{
-				m_graphElement = graphElement;
-				m_bestPossibleCostToTarget = targetElement != null ? graph.getLowestCostEstimateForMovementBetweenElementsFunc (graphElement, targetElement) : 0.0f;
-				IList<GraphElement> connectedElements = graph.getElementsConnectedToElementFunc (graphElement);
-				m_connectedElements = connectedElements != null ? connectedElements : null;
+				Assert.IsNotNull(aStar);
+				_aStar = aStar;
+			}
+
+			public void Setup(GraphElement graphElement) {
+				_graphElement = graphElement;
+				IEnumerable<GraphElement> connectedElements = graph.getElementsConnectedToElementFunc (graphElement);
+				if (connectedElements != null) {
+					if (_connectedElements == null) {
+						_connectedElements = new List<GraphElement>();
+					}
+					_connectedElements.AddRange(connectedElements);
+				}
+			}
+
+			public void Clear() {
+				_graphElement = default(GraphElement);
+				_connectedElements.Clear();
+
+				_bestCostToHere = 0.0f;
+				_bestCostVia = null;
 			}
 
 			public void SetBestCost (GraphEntry viaEntry, float totalCostToHere)
@@ -360,30 +424,47 @@ namespace CapeGuy.Algorithms {
 				Assert.IsTrue (viaEntry != null);
 				Assert.IsTrue (totalCostToHere >= viaEntry.bestCostToHere); // We can't have a smaller cost than our via entry.
 
-				this.m_bestCostToHere = totalCostToHere;
-				this.m_bestCostVia = viaEntry;
+				this._bestCostToHere = totalCostToHere;
+				this._bestCostVia = viaEntry;
 			}
 
 			public float currentBestPossibleTotalCost { get { return bestCostToHere + bestPossibleCostToTarget; } }
 
-			public float bestCostToHere { get { return m_bestCostToHere; } }
-			public GraphEntry bestCostVia { get { return m_bestCostVia; } }
+			public float bestCostToHere { get { return _bestCostToHere; } }
+			public GraphEntry bestCostVia { get { return _bestCostVia; } }
 
-			public GraphElement graphElement { get { return m_graphElement; } }
-			public float bestPossibleCostToTarget { get { return m_bestPossibleCostToTarget; } }
-			public IList<GraphElement> connectedElements { get { return m_connectedElements; } }
+			public GraphElement graphElement { get { return _graphElement; } }
+			public float bestPossibleCostToTarget {
+				get {
+					GraphElement targetElement = _aStar.targetElement;
+					#if REQUIRE_STRUCT
+					return graph.getLowestCostEstimateForMovementBetweenElementsFunc (graphElement, targetElement);
+					#else
+					return targetElement != null ? graph.getLowestCostEstimateForMovementBetweenElementsFunc (graphElement, targetElement) : 0.0f;
+					#endif
+
+				}
+			}
+			public IEnumerable<GraphElement> connectedElements { get { return _connectedElements; } }
 
 			#region private
+			private LazyGraph graph { get { return _aStar.graph; } }
+
 			// Can only be set on initialisation.
-			private GraphElement m_graphElement;
-			private float m_bestPossibleCostToTarget;
-			private IList<GraphElement> m_connectedElements;
+			private GraphElement _graphElement;
+			private List<GraphElement> _connectedElements;
+
+			private AStar<GraphElement> _aStar;
 
 			// Can be updated (via SetBestCost
-			public float m_bestCostToHere = 0.0f;
-			public GraphEntry m_bestCostVia = null;
+			public float _bestCostToHere = 0.0f;
+			public GraphEntry _bestCostVia = null;
 			#endregion
 		}
+
+		internal LazyGraph graph { get { return _graph; } }
+		internal GraphElement targetElement { get { return _targetEntry.graphElement; } }
+		internal GraphElement startElement { get { return _startEntry.graphElement; } }
 
 		private LazyGraph _graph;
 
@@ -392,6 +473,7 @@ namespace CapeGuy.Algorithms {
 
 		// Contains all the graph entries, indexed by GraphElement.
 		private Dictionary<GraphElement, GraphEntry> _graphEntries = new Dictionary<GraphElement, GraphEntry>();
+		private IList<GraphEntry> _graphEntryCache = new List<GraphEntry>();
 
 		// The current target element.
 		GraphEntry _targetEntry;

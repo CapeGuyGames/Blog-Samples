@@ -3,8 +3,9 @@
 // http://opensource.org/licenses/MIT. Cape Guy accepts
 // no responsibility for any damages, financial or otherwise,
 // incurred as a result of using this code.
-//
-// For more information see https://capeguy.co.uk/2016/01/a-for-all/
+// See https://capeguy.co.uk/2016/01/a-for-all/
+
+//#define ASTAR_REQUIRES_STRUCT_ELEMENT
 
 using UnityEngine;
 using System.Collections;
@@ -13,9 +14,6 @@ using System;
 using System.Linq;
 using NUnit.Framework;
 
-/// <summary>
-/// Tests for CapeGuy.Algorithms.AStar.
-/// </summary>
 namespace CapeGuy.Tests {
 
 	[TestFixture]
@@ -52,6 +50,7 @@ namespace CapeGuy.Tests {
 			private Vector2 _position;
 		}
 
+		#if !ASTAR_REQUIRES_STRUCT_ELEMENT
 		[Test]
 		public void CompletePathTest () {
 			var graph = new Algorithms.AStar<TestGraphElement>.LazyGraph ();
@@ -103,7 +102,9 @@ namespace CapeGuy.Tests {
 				Assert.IsTrue (TestGraphElement.AreAdjacent (prevElem, currElem));
 			}
 		}
+		#endif
 
+		#if !ASTAR_REQUIRES_STRUCT_ELEMENT
 		[Test]
 		public void PartialPathTest () {
 			var graph = new Algorithms.AStar<TestGraphElement>.LazyGraph ();
@@ -164,6 +165,7 @@ namespace CapeGuy.Tests {
 			Assert.AreEqual (partialRoute[1].position, new Vector2(1, 0));
 			Assert.AreEqual (partialRoute[2].position, new Vector2(2, 0));
 		}
+		#endif
 
 		// Test using a struct type as the GraphElemnt type.
 		[Test]
@@ -218,6 +220,43 @@ namespace CapeGuy.Tests {
 			int newyInt = yInt + yOffsetInt;
 
 			return new Vector2 ((float)newxInt, (float)newyInt);
+		}
+
+		[Test]
+		public void GraphReuseTest () {
+			var graph = new Algorithms.AStar<Vector2>.LazyGraph ();
+			graph.getElementsConnectedToElementFunc = (Vector2 testPos) => {
+				return new List<Vector2> {
+					testPos + Vector2.right,
+					testPos + Vector2.up,
+					testPos + Vector2.left,
+					testPos + Vector2.down
+				};
+			};
+			Func<Vector2, Vector2, float> costFunc = (Vector2 lhs, Vector2 rhs) => { return (rhs - lhs).magnitude; };
+			graph.getActualCostForMovementBetweenElementsFunc = costFunc;
+			graph.getLowestCostEstimateForMovementBetweenElementsFunc = costFunc;
+			Assert.IsTrue (graph.GetIsValid ());
+
+			var aStarSearch = new Algorithms.AStar<Vector2>(graph);
+
+			// Try a search...
+			{
+				IList<Vector2> result = aStarSearch.Calculate(new Vector2(0,0), new Vector2(2,0));
+				Assert.IsTrue(Enumerable.SequenceEqual(result, new List<Vector2> { new Vector2(0,0), new Vector2(1,0), new Vector2(2,0) }));
+			}
+
+			// Try a search with a different target...
+			{
+				IList<Vector2> result = aStarSearch.Calculate(new Vector2(-2,0), new Vector2(2,0));
+				Assert.IsTrue(Enumerable.SequenceEqual(result, new List<Vector2> { new Vector2(-2,0), new Vector2(-1,0), new Vector2(0,0), new Vector2(1,0), new Vector2(2,0) }));
+			}
+
+			// Try a search with a different start point...
+			{
+				IList<Vector2> result = aStarSearch.Calculate(new Vector2(-2,0), new Vector2(3,0));
+				Assert.IsTrue(Enumerable.SequenceEqual(result, new List<Vector2> { new Vector2(-2,0), new Vector2(-1,0), new Vector2(0,0), new Vector2(1,0), new Vector2(2,0), new Vector2(3,0) }));
+			}
 		}
 
 	}
