@@ -5,7 +5,11 @@
 // incurred as a result of using this code.
 
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEditor;
+using UnityEditor.SceneManagement;
+using System.Collections.Generic;
+using System.Linq;
 
 /// <summary>
 /// This script saves the current project and scene (if there is one) whenever the Unity editor enters play mode.
@@ -22,16 +26,26 @@ public class SaveAllOnEnterPlayMode {
 
 			if (EditorApplication.isPlayingOrWillChangePlaymode && !EditorApplication.isPlaying)
 			{
+				Debug.Log ("Auto-Saving scene(s) and assets before entering play mode: " + string.Join(", ", openSceneNames.ToArray()));
 
-				Debug.Log( "Auto-Saving scene and assets before entering play mode: " + EditorApplication.currentScene );
-				if (!string.IsNullOrEmpty(EditorApplication.currentScene)) {
-					EditorApplication.SaveScene();
-				}
-				EditorApplication.SaveAssets();
+				EditorSceneManager.SaveOpenScenes();
+				AssetDatabase.SaveAssets();
 			}
 
 		};
 
+	}
+
+	static IList<string> openSceneNames
+	{
+		get {
+			int numScenes = SceneManager.sceneCount;
+			IList<string> openScenes = new List<string> (numScenes);
+			for (int currSceneIndex = 0; currSceneIndex < numScenes; ++currSceneIndex) {
+				openScenes.Add(SceneManager.GetSceneAt(currSceneIndex).name);
+			}
+			return openScenes;
+		}
 	}
 
 }
