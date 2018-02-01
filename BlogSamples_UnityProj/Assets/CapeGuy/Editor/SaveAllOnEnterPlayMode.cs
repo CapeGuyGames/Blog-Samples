@@ -18,7 +18,7 @@ namespace CapeGuy.Utils.EditorUtils {
 	/// For more information see https://capeguy.co.uk/2015/07/unity-auto-save-on-play-in-editor/.
 	/// </summary>
 	[InitializeOnLoad]
-	public class SaveAllOnEnterPlayMode {
+	public static class SaveAllOnEnterPlayMode {
 
 		static SaveAllOnEnterPlayMode () {
 
