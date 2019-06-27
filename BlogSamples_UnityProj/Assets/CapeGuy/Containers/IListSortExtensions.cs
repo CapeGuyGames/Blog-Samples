@@ -112,7 +112,7 @@ public static class IListSortExtensions {
 	/// Returns the index of the last element in the sorted list for which the given predicate is true.
 	/// Note: Assumes the list is sorted wrt the given predicate.
 	/// ie. the predicate has at most one switch from true to false for the list.
-	/// Note: If the list contains no elements for which the prediate is true then -1 will be returned.
+	/// Note: If the list contains no elements for which the predicate is true then -1 will be returned.
 	/// </summary>
 	public static int BinaryFindLast<T> (this IList<T> self, Func<T, bool> predicate) {
 		var firstFalse = BinaryFindFirst (self, elem => !predicate (elem));
@@ -120,20 +120,62 @@ public static class IListSortExtensions {
 	}
 
 	/// <summary>
+	/// Returns the index of the last element in the sorted list for which the given predicate is true.
+	/// Note: Assumes the list is sorted wrt the given predicate where the given userData is passed to
+	/// each call of the predicate.
+	/// ie. the predicate has at most one switch from false to true for the list.
+	/// Using this version over just a predicate allows usage of BinaryFindLast which avoids closures
+	/// in the predicate (and the associated memory allocation involved with that).
+	/// Note: If the list contains no elements for which the predicate is true then -1 will be returned.
+	/// </summary>
+	public static int BinaryFindLast<T, U> (this IList<T> self, Func<T, U, bool> predicate, U userData) {
+		var firstFalse = BinaryFindFirst (self, (elem, userDataInner) => !predicate (elem, userDataInner), userData);
+		return firstFalse - 1;
+	}
+
+	/// <summary>
 	/// Returns the index of the first element in the sorted list for which the given predicate is true.
 	/// Note: Assumes the list is sorted wrt the given predicate.
 	/// ie. the predicate has at most one switch from false to true for the list.
-	/// Note: If the list contains no elements for which the prediate is true then self.Count will be returned.
+	/// Note: If the list contains no elements for which the predicate is true then self.Count will be returned.
 	/// It is always safe to use List.InsertAt directly with the result.
 	/// </summary>
-	public static int BinaryFindFirst<T> (this IList<T> self, Func<T, bool> prediate) {
+	public static int BinaryFindFirst<T> (this IList<T> self, Func<T, bool> predicate) {
 		int numElements = self.Count;
 		int lowerIndex = 0;
 		int upperIndex = numElements;
 
 		while (lowerIndex < upperIndex) {
 			int middleIndex = lowerIndex + ((upperIndex - lowerIndex) / 2);
-			if (prediate (self[middleIndex])) {
+			if (predicate (self[middleIndex])) {
+				upperIndex = middleIndex;
+			} else {
+				lowerIndex = middleIndex + 1;
+			}
+		}
+		Assert.IsTrue (lowerIndex >= upperIndex);
+		Assert.IsTrue (0 <= lowerIndex && lowerIndex <= numElements);
+		return lowerIndex;
+	}
+
+	/// <summary>
+	/// Returns the index of the first element in the sorted list for which the given predicate is true.
+	/// Note: Assumes the list is sorted wrt the given predicate where the given userData is passed to
+	/// each call of the predicate.
+	/// ie. the predicate has at most one switch from false to true for the list.
+	/// Using this version over just a predicate allows usage of BinaryFindFirst which avoids closures
+	/// in the predicate (and the associated memory allocation involved with that).
+	/// Note: If the list contains no elements for which the predicate is true then self.Count will be returned.
+	/// It is always safe to use List.InsertAt directly with the result.
+	/// </summary>
+	public static int BinaryFindFirst<T, U> (this IList<T> self, Func<T, U, bool> predicate, U userData) {
+		int numElements = self.Count;
+		int lowerIndex = 0;
+		int upperIndex = numElements;
+
+		while (lowerIndex < upperIndex) {
+			int middleIndex = lowerIndex + ((upperIndex - lowerIndex) / 2);
+			if (predicate (self[middleIndex], userData)) {
 				upperIndex = middleIndex;
 			} else {
 				lowerIndex = middleIndex + 1;
@@ -176,10 +218,10 @@ public static class IListSortExtensions {
 	/// otherwise, a negative number that is the bitwise complement of the index
 	/// of the next element that is larger than item or, if there is no larger element,
 	/// the bitwise complement of Count.</returns>
-	public static int BinarySearch<T, U> (this IList<T> self, U searchElement, Func<T, U, int> sortPred) {
+	public static int BinarySearch<T, U> (this IList<T> self, U element, Func<T, U, int> sortPred) {
 		int numElems = self.Count;
-		int lowerIndex = self.BinaryLowerBound (searchElement, sortPred);
-		if (lowerIndex < numElems && sortPred (self[lowerIndex], searchElement) == 0) {
+		int lowerIndex = self.BinaryLowerBound (element, sortPred);
+		if (lowerIndex < numElems && sortPred (self[lowerIndex], element) == 0) {
 			return lowerIndex;
 		}
 		return ~lowerIndex;
