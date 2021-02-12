@@ -326,15 +326,18 @@ public static class IListSortExtensions {
 	}
 
 	/// <summary>
-	/// // Partition the list section from lowIndex to highIndex into three parts
-	// 1. The elements less than pivot in the low section
-	// 2. The elements greater than pivot in the high section
-	// 3. The elements equal to pivot in the middle section
+	/// Partition the list section from lowIndex to highIndex into three parts
+	/// 1. The elements less than pivot in the low section
+	/// 2. The elements greater than pivot in the high section
+	/// 3. The elements equal to pivot in the middle section
 	/// </summary>
-	/// <returns>A pair containing
-	///  first: The lowest index of an element greater than or equal to the pivot
-	///  second: The highest index of an element less than or equal to the pivot
-	/// </returns>
+	/// <param name="list">The list we are partitioning part of</param>
+	/// <param name="lowIndex">The first index of the partition</param>
+	/// <param name="highIndex">The last index of the partition</param>
+	/// <param name="sortPred">The predicate we are sorting the list WRT</param>
+	/// <param name="leftIndex">The lowest index of an element greater than or equal to the pivot</param>
+	/// <param name="rightIndex">The highest index of an element less than or equal to the pivot</param>
+	/// <typeparam name="T"></typeparam>
 	static void QuicksortPartition<T> (
 		IList<T> list,
 		int lowIndex,
@@ -345,8 +348,7 @@ public static class IListSortExtensions {
 	) {
 		var pivotIndex = lowIndex + ((highIndex - lowIndex) / 2);
 		var pivotElem = list[pivotIndex];
-
-
+		Assert.IsTrue(sortPred(pivotElem, pivotElem) == 0); // The pivot element should equal itself!
 
 		int l = lowIndex; // The first index where the element is not known to be less than the pivot element
 		int m = l; // The first element where the element is not known to be less than or equal to the pivot element
@@ -357,7 +359,7 @@ public static class IListSortExtensions {
 			m = Math.Max (l, m);
 		}
 
-		while (true) {
+		while (m <= h) {
 
 			int lastMResult;
 			while ((lastMResult = sortPred (list[m], pivotElem)) == 0) {
