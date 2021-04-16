@@ -350,39 +350,24 @@ public static class IListSortExtensions {
 		var pivotElem = list[pivotIndex];
 		Assert.IsTrue(sortPred(pivotElem, pivotElem) == 0); // The pivot element should equal itself!
 
-		int l = lowIndex; // The first index where the element is not known to be less than the pivot element
-		int m = l; // The first element where the element is not known to be less than or equal to the pivot element
-		int h = highIndex; // The last element where it is not known to be greater than the pivot element.
+		// Move the pivot to the start of the list (as we already know it's less than or equal to the pivot)
+		list.SwapElements (lowIndex, pivotIndex);
 
-		while (sortPred (list[l], pivotElem) < 0) {
-			++l;
-			m = Math.Max (l, m);
-		}
+		var l = lowIndex; // The first index where the element is not known to be less than the pivot element
+		var h = highIndex; // The last element where it is not known to be greater than the pivot element.
+		var m = Math.Min(l+1, h); // The first element where the element is not known to be less than or equal to the pivot element
 
 		while (m <= h) {
-
-			int lastMResult;
-			while ((lastMResult = sortPred (list[m], pivotElem)) == 0) {
+			var mResult = sortPred(list[m], pivotElem);
+			if (mResult < 0) {
+				list.SwapElements (l, m);
+				++l;
 				++m;
-			}
-
-			while (sortPred (list[h], pivotElem) > 0) {
+			} else if (mResult > 0) {
+				list.SwapElements (h, m);
 				--h;
-			}
-
-			if (m <= h) {
-
-				if (lastMResult < 0) {
-					list.SwapElements (l, m);
-					++l;
-					++m;
-				} else {
-					Assert.IsTrue (lastMResult > 0); // As we tested for lastMResult == 0 in the initial while loop.
-					list.SwapElements (h, m);
-					--h;
-				}
 			} else {
-				break;
+				++m;
 			}
 		}
 
